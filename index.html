@@ -260,6 +260,17 @@
       overflow-wrap: anywhere;
     }
 
+    .chat-link {
+      color: #bf94ff;
+      text-decoration: none;
+      word-break: break-word;
+    }
+
+    .chat-link:hover {
+      color: #d7c0ff;
+      text-decoration: underline;
+    }
+
     .chat-author {
       margin-right: 5px;
       color: #bf94ff;
@@ -690,6 +701,7 @@
 
       for (const token of text.split(/(\s+)/)) {
         const emoteUrl = emotes.get(token);
+        const linkPart = parseMessageUrl(token);
 
         if (emoteUrl) {
           const img = document.createElement("img");
@@ -698,6 +710,14 @@
           img.alt = token;
           img.title = token;
           row.append(img);
+        } else if (linkPart) {
+          const link = document.createElement("a");
+          link.className = "chat-link";
+          link.href = linkPart.url.href;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          link.textContent = linkPart.text;
+          row.append(link, document.createTextNode(linkPart.trailing));
         } else {
           row.append(document.createTextNode(token));
         }
@@ -712,6 +732,24 @@
 
       if (nearBottom) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+    }
+
+    function parseMessageUrl(token) {
+      const match = token.match(/^(https?:\/\/.+?)([),.!?;:]*)$/i);
+
+      if (!match) {
+        return null;
+      }
+
+      try {
+        return {
+          text: match[1],
+          trailing: match[2],
+          url: new URL(match[1]),
+        };
+      } catch {
+        return null;
       }
     }
 
