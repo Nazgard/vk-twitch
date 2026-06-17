@@ -257,7 +257,14 @@
     }
 
     .chat-message {
+      padding: 2px 4px;
+      border-radius: 6px;
       overflow-wrap: anywhere;
+    }
+
+    .chat-message.first-message {
+      background: rgba(145, 70, 255, 0.14);
+      box-shadow: inset 3px 0 0 rgba(145, 70, 255, 0.85);
     }
 
     .chat-link {
@@ -281,6 +288,21 @@
       content: ":";
       color: #adadb8;
       font-weight: 500;
+    }
+
+    .first-badge {
+      display: inline-flex;
+      align-items: center;
+      height: 18px;
+      margin-right: 6px;
+      padding: 0 6px;
+      border: 1px solid rgba(145, 70, 255, 0.72);
+      border-radius: 999px;
+      background: rgba(145, 70, 255, 0.18);
+      color: #d7c0ff;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
     .chat-emote {
@@ -686,12 +708,20 @@
       }
     }
 
-    function addMessage(author, text, color) {
+    function addMessage(author, text, color, options = {}) {
       const row = document.createElement("div");
       const name = document.createElement("span");
       row.className = "chat-message";
       name.className = "chat-author";
       name.textContent = author;
+
+      if (options.firstMessage) {
+        const badge = document.createElement("span");
+        badge.className = "first-badge";
+        badge.textContent = "first";
+        row.classList.add("first-message");
+        row.append(badge);
+      }
 
       if (color) {
         name.style.color = color;
@@ -900,6 +930,7 @@
               message.tags["display-name"] || message.prefix.split("!")[0],
               message.trailing,
               message.tags.color,
+              { firstMessage: message.tags["first-msg"] === "1" },
             );
           }
         }
