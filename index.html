@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Praden Live</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #14181f;
+      --panel-2: #10141a;
+      --text: #eef2f7;
+      --muted: #9ba7b6;
+      --line: #27303c;
+      --accent: #42d392;
+      --chat-width: clamp(320px, 28vw, 460px);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      min-width: 320px;
+      overflow: hidden;
+    }
+
+    body.theater-page {
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(66, 211, 146, 0.14), transparent 30rem),
+        linear-gradient(135deg, #0b0d10 0%, #11161d 48%, #090b0e 100%);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 64px;
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(12, 15, 20, 0.86);
+      backdrop-filter: blur(16px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(66, 211, 146, 0.45);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(66, 211, 146, 0.24), rgba(124, 92, 255, 0.18));
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    .title {
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      overflow: hidden;
+      font-size: 18px;
+      font-weight: 760;
+      letter-spacing: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .subtitle {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .theater-actions {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10;
+      display: none;
+    }
+
+    button,
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #18202a;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    button:hover,
+    a.button:hover {
+      border-color: rgba(66, 211, 146, 0.55);
+      background: #202a36;
+      color: #ffffff;
+    }
+
+    button[aria-pressed="true"] {
+      border-color: rgba(66, 211, 146, 0.75);
+      background: rgba(66, 211, 146, 0.14);
+      color: #cffff0;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 12px var(--chat-width);
+      gap: 12px 0;
+      min-height: 0;
+      padding: 12px;
+    }
+
+    .resize-handle {
+      position: relative;
+      min-width: 12px;
+      min-height: 0;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      cursor: col-resize;
+      touch-action: none;
+    }
+
+    .resize-handle::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 2px;
+      height: min(120px, 34vh);
+      border-radius: 999px;
+      background: rgba(145, 70, 255, 0);
+      transform: translate(-50%, -50%);
+      transition: background 140ms ease, box-shadow 140ms ease, width 140ms ease;
+    }
+
+    .resize-handle:hover::before,
+    .resize-handle:focus-visible::before,
+    .resizing .resize-handle::before {
+      width: 4px;
+      background: rgba(145, 70, 255, 0.85);
+      box-shadow: 0 0 14px rgba(145, 70, 255, 0.6);
+    }
+
+    .frame-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding: 0 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #ff426a;
+      box-shadow: 0 0 14px rgba(255, 66, 106, 0.8);
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      background: #050607;
+    }
+
+    .chat-warning {
+      display: none;
+      align-content: center;
+      gap: 12px;
+      padding: 24px;
+      background: #0f1319;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .chat-warning strong {
+      color: var(--text);
+    }
+
+    .needs-server .chat-warning {
+      display: grid;
+    }
+
+    .needs-server #chatFrame {
+      display: none;
+    }
+
+    .chat-collapsed {
+      --chat-width: 0px;
+    }
+
+    .chat-collapsed .chat-panel {
+      display: none;
+    }
+
+    .chat-collapsed .resize-handle {
+      display: none;
+    }
+
+    .theater-mode {
+      grid-template-rows: 1fr;
+      width: 100vw;
+      height: 100vh;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .theater-mode .topbar,
+    .theater-mode .panel-header {
+      display: none;
+    }
+
+    .theater-mode .stage {
+      grid-template-columns: minmax(0, 1fr) 8px var(--chat-width);
+      grid-template-rows: minmax(0, 1fr);
+      width: 100vw;
+      height: 100vh;
+      min-height: 100vh;
+      padding: 0;
+      gap: 0;
+    }
+
+    .theater-mode .resize-handle {
+      min-width: 8px;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .theater-mode .frame-panel {
+      grid-template-rows: minmax(0, 1fr);
+      width: 100%;
+      height: 100vh;
+      min-height: 100vh;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .theater-mode iframe {
+      display: block;
+      width: 100%;
+      height: 100vh;
+      min-height: 100vh;
+    }
+
+    .theater-mode .theater-actions {
+      display: flex;
+    }
+
+    @media (max-width: 920px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .actions {
+        justify-content: flex-start;
+        width: 100%;
+      }
+
+      .stage {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(52vh, 62vh) minmax(420px, 46vh);
+        height: calc(100vh - 116px);
+        min-height: 760px;
+      }
+
+      .chat-collapsed .stage {
+        grid-template-rows: minmax(70vh, 1fr);
+      }
+
+      .resize-handle {
+        display: none;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .topbar {
+        padding: 12px;
+      }
+
+      .stage {
+        gap: 8px;
+        min-height: 700px;
+        padding: 8px;
+      }
+
+      button,
+      a.button {
+        flex: 1 1 auto;
+      }
+    }
+
+    .theater-mode,
+    .theater-mode .stage,
+    .theater-mode .frame-panel,
+    .theater-mode iframe {
+      height: 100vh;
+      min-height: 100vh;
+    }
+
+    .theater-mode .stage {
+      grid-template-columns: minmax(0, 1fr) 8px var(--chat-width);
+      grid-template-rows: minmax(0, 1fr);
+      width: 100vw;
+      padding: 0;
+      gap: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">P</div>
+        <div class="title">
+          <h1>Praden Live</h1>
+          <div class="subtitle">VK Play трансляция и Twitch чат на одной странице</div>
+        </div>
+      </div>
+      <nav class="actions" aria-label="Действия">
+        <button type="button" id="toggleTheater" aria-pressed="false">Театр</button>
+        <button type="button" id="toggleChat" aria-pressed="false">Скрыть чат</button>
+        <a class="button" href="https://live.vkvideo.ru/app/embed/praden" target="_blank" rel="noreferrer">Открыть плеер</a>
+        <a class="button" href="https://www.twitch.tv/popout/praden/chat?popout=" target="_blank" rel="noreferrer">Открыть чат</a>
+      </nav>
+    </header>
+    <div class="theater-actions" aria-label="Театральный режим">
+      <button type="button" id="exitTheater">Обычный режим</button>
+    </div>
+
+    <section class="stage" aria-label="Трансляция и чат">
+      <article class="frame-panel player-panel">
+        <div class="panel-header">
+          <span>VK Play</span>
+          <span class="status">live.vkvideo.ru</span>
+        </div>
+        <iframe
+          title="VK Play player Praden"
+          src="https://live.vkvideo.ru/app/embed/praden"
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock"
+          allowfullscreen>
+        </iframe>
+      </article>
+
+      <button
+        class="resize-handle"
+        id="resizeChat"
+        type="button"
+        aria-label="Изменить размер чата">
+      </button>
+
+      <aside class="frame-panel chat-panel">
+        <div class="panel-header">
+          <span>Twitch chat</span>
+          <span>praden</span>
+        </div>
+        <iframe
+          id="chatFrame"
+          title="Twitch chat Praden"
+          allow="autoplay">
+        </iframe>
+        <div class="chat-warning">
+          <strong>Twitch chat requires a web server.</strong>
+          <span>Open this page from localhost so Twitch can validate the embed parent.</span>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const app = document.querySelector("#app");
+    const toggleChat = document.querySelector("#toggleChat");
+    const toggleTheater = document.querySelector("#toggleTheater");
+    const exitTheater = document.querySelector("#exitTheater");
+    const resizeChat = document.querySelector("#resizeChat");
+    const chatFrame = document.querySelector("#chatFrame");
+    const chatPanel = document.querySelector(".chat-panel");
+    const chatUrl = new URL("https://www.twitch.tv/embed/praden/chat");
+    const hostname = window.location.hostname;
+    const savedChatWidth = Number(localStorage.getItem("chatWidth"));
+
+    function clampChatWidth(width) {
+      const viewport = window.innerWidth;
+      const min = 280;
+      const max = Math.max(min, Math.min(720, viewport - 420));
+      return Math.min(Math.max(width, min), max);
+    }
+
+    function setChatWidth(width, persist = true) {
+      const nextWidth = clampChatWidth(width);
+      app.style.setProperty("--chat-width", `${nextWidth}px`);
+
+      if (persist) {
+        localStorage.setItem("chatWidth", String(nextWidth));
+      }
+    }
+
+    if (Number.isFinite(savedChatWidth) && savedChatWidth > 0) {
+      setChatWidth(savedChatWidth, false);
+    }
+
+    if (hostname) {
+      chatUrl.searchParams.set("parent", hostname);
+      chatUrl.searchParams.set("darkpopout", "");
+      chatFrame.src = chatUrl.toString();
+    } else {
+      chatPanel.classList.add("needs-server");
+    }
+
+    toggleChat.addEventListener("click", () => {
+      const collapsed = app.classList.toggle("chat-collapsed");
+      toggleChat.setAttribute("aria-pressed", String(collapsed));
+      toggleChat.textContent = collapsed ? "Показать чат" : "Скрыть чат";
+    });
+
+    resizeChat.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      document.body.classList.add("resizing");
+      resizeChat.setPointerCapture(event.pointerId);
+
+      const resize = (moveEvent) => {
+        setChatWidth(window.innerWidth - moveEvent.clientX);
+      };
+
+      const stop = () => {
+        document.body.classList.remove("resizing");
+        resizeChat.removeEventListener("pointermove", resize);
+        resizeChat.removeEventListener("pointerup", stop);
+        resizeChat.removeEventListener("pointercancel", stop);
+      };
+
+      resize(event);
+      resizeChat.addEventListener("pointermove", resize);
+      resizeChat.addEventListener("pointerup", stop);
+      resizeChat.addEventListener("pointercancel", stop);
+    });
+
+    window.addEventListener("resize", () => {
+      const currentWidth = Number(localStorage.getItem("chatWidth"));
+
+      if (Number.isFinite(currentWidth) && currentWidth > 0) {
+        setChatWidth(currentWidth, false);
+      }
+    });
+
+    function setTheaterMode(theater) {
+      document.body.classList.toggle("theater-page", theater);
+      app.classList.toggle("theater-mode", theater);
+      toggleTheater.setAttribute("aria-pressed", String(theater));
+      toggleTheater.textContent = theater ? "Обычный режим" : "Театр";
+    }
+
+    toggleTheater.addEventListener("click", () => {
+      setTheaterMode(!app.classList.contains("theater-mode"));
+    });
+
+    exitTheater.addEventListener("click", () => {
+      setTheaterMode(false);
+    });
+  </script>
+</body>
+</html>
