@@ -236,6 +236,134 @@
       background: #050607;
     }
 
+    .chat-view {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto auto;
+      min-height: 0;
+      background: #0e0e10;
+    }
+
+    .chat-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 10px 12px;
+      color: #efeff1;
+      font-size: 13px;
+      line-height: 1.35;
+      scrollbar-color: #3a3a3d transparent;
+    }
+
+    .chat-message {
+      overflow-wrap: anywhere;
+    }
+
+    .chat-author {
+      margin-right: 5px;
+      color: #bf94ff;
+      font-weight: 700;
+    }
+
+    .chat-author::after {
+      content: ":";
+      color: #adadb8;
+      font-weight: 500;
+    }
+
+    .chat-emote {
+      width: auto;
+      max-width: 112px;
+      height: 28px;
+      margin: -5px 1px;
+      vertical-align: middle;
+    }
+
+    .chat-status {
+      min-height: 34px;
+      padding: 8px 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: #adadb8;
+      font-size: 12px;
+      background: #18181b;
+    }
+
+    .chat-compose {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: #18181b;
+    }
+
+    .chat-input-row,
+    .auth-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .auth-row {
+      display: none;
+    }
+
+    .needs-auth .auth-row {
+      display: grid;
+    }
+
+    .chat-input,
+    .auth-input {
+      min-width: 0;
+      height: 36px;
+      border: 1px solid #3a3a3d;
+      border-radius: 8px;
+      background: #0e0e10;
+      color: #efeff1;
+      font: inherit;
+      font-size: 13px;
+      padding: 0 10px;
+      outline: none;
+    }
+
+    .chat-input:focus,
+    .auth-input:focus {
+      border-color: rgba(145, 70, 255, 0.95);
+      box-shadow: 0 0 0 2px rgba(145, 70, 255, 0.24);
+    }
+
+    .chat-input:disabled {
+      color: #777783;
+      cursor: not-allowed;
+    }
+
+    .chat-submit,
+    .auth-save {
+      min-height: 36px;
+      border-color: #772ce8;
+      background: #772ce8;
+      color: #ffffff;
+    }
+
+    .chat-submit:hover,
+    .auth-save:hover {
+      border-color: #9146ff;
+      background: #9146ff;
+    }
+
+    .chat-submit:disabled {
+      border-color: #3a3a3d;
+      background: #252529;
+      color: #777783;
+      cursor: not-allowed;
+    }
+
+    .autocomplete-hint {
+      min-height: 16px;
+      color: #adadb8;
+      font-size: 12px;
+    }
+
     .chat-warning {
       display: none;
       align-content: center;
@@ -255,7 +383,7 @@
       display: grid;
     }
 
-    .needs-server #chatFrame {
+    .needs-server .chat-view {
       display: none;
     }
 
@@ -438,11 +566,33 @@
           <span>Twitch chat</span>
           <span>praden</span>
         </div>
-        <iframe
-          id="chatFrame"
-          title="Twitch chat Praden"
-          allow="autoplay">
-        </iframe>
+        <div class="chat-view">
+          <div class="chat-messages" id="chatMessages" role="log" aria-live="polite"></div>
+          <div class="chat-status" id="chatStatus">Connecting to Twitch chat...</div>
+          <form class="chat-compose needs-auth" id="chatCompose">
+            <div class="chat-input-row">
+              <input
+                class="chat-input"
+                id="chatInput"
+                type="text"
+                maxlength="500"
+                autocomplete="off"
+                placeholder="Add OAuth token to write..."
+                disabled>
+              <button class="chat-submit" id="chatSubmit" type="submit" disabled>Send</button>
+            </div>
+            <div class="auth-row">
+              <input
+                class="auth-input"
+                id="authInput"
+                type="password"
+                autocomplete="off"
+                placeholder="oauth:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+              <button class="auth-save" type="button" id="saveAuth">Save</button>
+            </div>
+            <div class="autocomplete-hint" id="autocompleteHint">Tab completes loaded FFZ/7TV emotes.</div>
+          </form>
+        </div>
         <div class="chat-warning">
           <strong>Twitch chat requires a web server.</strong>
           <span>Open this page from localhost so Twitch can validate the embed parent.</span>
@@ -457,11 +607,22 @@
     const toggleTheater = document.querySelector("#toggleTheater");
     const exitTheater = document.querySelector("#exitTheater");
     const resizeChat = document.querySelector("#resizeChat");
-    const chatFrame = document.querySelector("#chatFrame");
+    const chatMessages = document.querySelector("#chatMessages");
+    const chatStatus = document.querySelector("#chatStatus");
+    const chatCompose = document.querySelector("#chatCompose");
+    const chatInput = document.querySelector("#chatInput");
+    const chatSubmit = document.querySelector("#chatSubmit");
+    const authInput = document.querySelector("#authInput");
+    const saveAuth = document.querySelector("#saveAuth");
+    const autocompleteHint = document.querySelector("#autocompleteHint");
     const chatPanel = document.querySelector(".chat-panel");
-    const chatUrl = new URL("https://www.twitch.tv/embed/praden/chat");
-    const hostname = window.location.hostname;
+    const channel = "praden";
     const savedChatWidth = Number(localStorage.getItem("chatWidth"));
+    const emotes = new Map();
+    const maxMessages = 180;
+    let chatSocket;
+    let reconnectTimer;
+    let autocompleteState = null;
 
     function clampChatWidth(width) {
       const viewport = window.innerWidth;
@@ -483,13 +644,344 @@
       setChatWidth(savedChatWidth, false);
     }
 
-    if (hostname) {
-      chatUrl.searchParams.set("parent", hostname);
-      chatUrl.searchParams.set("darkpopout", "");
-      chatFrame.src = chatUrl.toString();
-    } else {
-      chatPanel.classList.add("needs-server");
+    function setChatStatus(text) {
+      chatStatus.textContent = text;
     }
+
+    function getAuth() {
+      return JSON.parse(localStorage.getItem("twitchAuth") || "null");
+    }
+
+    function normalizeToken(token) {
+      const trimmed = token.trim();
+      return trimmed.startsWith("oauth:") ? trimmed : `oauth:${trimmed}`;
+    }
+
+    function setInputAuthState() {
+      const auth = getAuth();
+      const authed = Boolean(auth?.username && auth?.token);
+      chatCompose.classList.toggle("needs-auth", !authed);
+      chatInput.disabled = !authed;
+      chatSubmit.disabled = !authed;
+      chatInput.placeholder = authed ? `Message #${channel}` : "Add OAuth token to write...";
+      autocompleteHint.textContent = authed
+        ? "Tab completes loaded FFZ/7TV emotes."
+        : "Paste a Twitch chat OAuth token to enable sending.";
+    }
+
+    function addEmote(name, url) {
+      if (!emotes.has(name)) {
+        emotes.set(name, url);
+      }
+    }
+
+    function addMessage(author, text, color) {
+      const row = document.createElement("div");
+      const name = document.createElement("span");
+      row.className = "chat-message";
+      name.className = "chat-author";
+      name.textContent = author;
+
+      if (color) {
+        name.style.color = color;
+      }
+
+      row.append(name, " ");
+
+      for (const token of text.split(/(\s+)/)) {
+        const emoteUrl = emotes.get(token);
+
+        if (emoteUrl) {
+          const img = document.createElement("img");
+          img.className = "chat-emote";
+          img.src = emoteUrl;
+          img.alt = token;
+          img.title = token;
+          row.append(img);
+        } else {
+          row.append(document.createTextNode(token));
+        }
+      }
+
+      const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+      chatMessages.append(row);
+
+      while (chatMessages.children.length > maxMessages) {
+        chatMessages.firstElementChild.remove();
+      }
+
+      if (nearBottom) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+    }
+
+    async function resolveTwitchUser(token) {
+      const response = await fetch("https://id.twitch.tv/oauth2/validate", {
+        headers: { Authorization: `OAuth ${token.replace(/^oauth:/, "")}` },
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid Twitch OAuth token");
+      }
+
+      return response.json();
+    }
+
+    function scheduleReconnect() {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connectTwitchChat, 3000);
+    }
+
+    function sendChatMessage(text) {
+      const message = text.trim();
+
+      if (!message || chatSocket?.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+
+      chatSocket.send(`PRIVMSG #${channel} :${message}`);
+      return true;
+    }
+
+    function parseIrcMessage(raw) {
+      let rest = raw;
+      const tags = {};
+
+      if (rest.startsWith("@")) {
+        const tagEnd = rest.indexOf(" ");
+        const tagText = rest.slice(1, tagEnd);
+        rest = rest.slice(tagEnd + 1);
+
+        for (const pair of tagText.split(";")) {
+          const [key, value = ""] = pair.split("=");
+          tags[key] = value;
+        }
+      }
+
+      const trailingIndex = rest.indexOf(" :");
+      const trailing = trailingIndex >= 0 ? rest.slice(trailingIndex + 2) : "";
+      const parts = (trailingIndex >= 0 ? rest.slice(0, trailingIndex) : rest).split(" ");
+      const prefix = parts[0]?.startsWith(":") ? parts.shift().slice(1) : "";
+      const command = parts.shift();
+
+      return { tags, prefix, command, params: parts, trailing };
+    }
+
+    async function loadFfzEmotes() {
+      const roomResponse = await fetch(`https://api.frankerfacez.com/v1/room/${channel}`);
+      const roomData = await roomResponse.json();
+      const roomSets = Object.values(roomData.sets || {});
+
+      for (const set of roomSets) {
+        for (const emote of set.emoticons || []) {
+          const urls = emote.urls || {};
+          addEmote(emote.name, `https:${urls[4] || urls[2] || urls[1]}`);
+        }
+      }
+
+      const globalResponse = await fetch("https://api.frankerfacez.com/v1/set/global");
+      const globalData = await globalResponse.json();
+
+      for (const set of Object.values(globalData.sets || {})) {
+        for (const emote of set.emoticons || []) {
+          const urls = emote.urls || {};
+          addEmote(emote.name, `https:${urls[4] || urls[2] || urls[1]}`);
+        }
+      }
+
+      return roomData.room?.twitch_id;
+    }
+
+    async function loadSevenTvEmotes(twitchId) {
+      const endpoints = ["https://7tv.io/v3/emote-sets/global"];
+
+      if (twitchId) {
+        endpoints.push(`https://7tv.io/v3/users/twitch/${twitchId}`);
+      }
+
+      for (const endpoint of endpoints) {
+        const response = await fetch(endpoint);
+        const data = await response.json();
+        const sets = data.emote_set ? [data.emote_set] : [data];
+
+        for (const set of sets) {
+          for (const emote of set.emotes || []) {
+            const host = emote.data?.host || emote.host;
+            const files = host?.files || [];
+            const file = files.find((item) => item.name === "3x.webp")
+              || files.find((item) => item.name?.endsWith(".webp"))
+              || files[files.length - 1];
+
+            if (host && file) {
+              addEmote(emote.name, `https:${host.url}/${file.name}`);
+            }
+          }
+        }
+      }
+    }
+
+    async function loadEmotes() {
+      try {
+        setChatStatus("Loading FFZ and 7TV emotes...");
+        const twitchId = await loadFfzEmotes();
+        await loadSevenTvEmotes(twitchId);
+        setChatStatus(`Connected. ${emotes.size} FFZ/7TV emotes loaded.`);
+      } catch (error) {
+        console.warn(error);
+        setChatStatus("Connected. Some 7TV/FFZ emotes failed to load.");
+      }
+    }
+
+    function connectTwitchChat() {
+      const auth = getAuth();
+      const nick = auth?.username || `justinfan${Math.floor(Math.random() * 100000)}`;
+      const socket = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+      chatSocket = socket;
+
+      socket.addEventListener("open", () => {
+        socket.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
+        socket.send(`PASS ${auth?.token || "SCHMOOPIIE"}`);
+        socket.send(`NICK ${nick}`);
+        socket.send(`JOIN #${channel}`);
+        setChatStatus(auth ? `Connected as ${auth.username}.` : "Connected read-only.");
+      });
+
+      socket.addEventListener("message", (event) => {
+        for (const raw of String(event.data).split("\r\n")) {
+          if (!raw) continue;
+
+          if (raw.startsWith("PING")) {
+            socket.send("PONG :tmi.twitch.tv");
+            continue;
+          }
+
+          const message = parseIrcMessage(raw);
+
+          if (message.command === "PRIVMSG") {
+            addMessage(
+              message.tags["display-name"] || message.prefix.split("!")[0],
+              message.trailing,
+              message.tags.color,
+            );
+          }
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (socket !== chatSocket) {
+          return;
+        }
+
+        setChatStatus("Disconnected. Reconnecting...");
+        scheduleReconnect();
+      });
+
+      socket.addEventListener("error", () => {
+        setChatStatus("Twitch chat connection error.");
+      });
+    }
+
+    loadEmotes();
+    setInputAuthState();
+    connectTwitchChat();
+
+    saveAuth.addEventListener("click", async () => {
+      const rawToken = authInput.value.trim();
+
+      if (!rawToken) {
+        return;
+      }
+
+      try {
+        saveAuth.disabled = true;
+        setChatStatus("Validating Twitch token...");
+        const token = normalizeToken(rawToken);
+        const user = await resolveTwitchUser(token);
+        localStorage.setItem("twitchAuth", JSON.stringify({
+          token,
+          username: user.login,
+        }));
+        authInput.value = "";
+        setInputAuthState();
+        chatSocket?.close();
+        connectTwitchChat();
+      } catch (error) {
+        console.warn(error);
+        setChatStatus("Invalid OAuth token. Token needs chat:read and chat:edit scopes.");
+      } finally {
+        saveAuth.disabled = false;
+      }
+    });
+
+    chatCompose.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = chatInput.value;
+
+      if (sendChatMessage(text)) {
+        chatInput.value = "";
+        autocompleteState = null;
+      } else {
+        setChatStatus("Cannot send: Twitch chat is not connected.");
+      }
+    });
+
+    chatInput.addEventListener("input", () => {
+      autocompleteState = null;
+    });
+
+    chatInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const cursor = chatInput.selectionStart;
+      event.preventDefault();
+      let state = autocompleteState;
+
+      if (!state || cursor !== state.cursor) {
+        const before = chatInput.value.slice(0, cursor);
+        const match = before.match(/(^|\s)(\S*)$/);
+        const prefix = match?.[2] || "";
+
+        if (!prefix) {
+          return;
+        }
+
+        const prefixLower = prefix.toLowerCase();
+        state = {
+          prefix,
+          start: cursor - prefix.length,
+          end: cursor,
+          cursor,
+          index: 0,
+          matches: [...emotes.keys()]
+            .filter((name) => name.toLowerCase().startsWith(prefixLower))
+            .sort((a, b) => a.localeCompare(b)),
+        };
+        autocompleteState = state;
+      } else {
+        state.index += 1;
+      }
+
+      const matches = state.matches;
+
+      if (!matches.length) {
+        autocompleteHint.textContent = `No emote matches for "${state.prefix}".`;
+        return;
+      }
+
+      const replacement = matches[state.index % matches.length];
+      const nextValue = `${chatInput.value.slice(0, state.start)}${replacement} ${chatInput.value.slice(state.end)}`;
+      const nextCursor = state.start + replacement.length + 1;
+      chatInput.value = nextValue;
+      chatInput.setSelectionRange(nextCursor, nextCursor);
+      autocompleteHint.textContent = `${replacement} (${(state.index % matches.length) + 1}/${matches.length})`;
+      autocompleteState = {
+        ...state,
+        end: nextCursor,
+        cursor: nextCursor,
+      };
+    });
 
     toggleChat.addEventListener("click", () => {
       const collapsed = app.classList.toggle("chat-collapsed");
